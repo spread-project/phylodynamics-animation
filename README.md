@@ -2,7 +2,7 @@
 
 A Claude generated, interactive, animated explainer of **phylodynamics**: how the family tree of pathogen genomes reveals when an epidemic started, how fast it spread and where it went.
 
-**Live version:** `https://spread-project.github.io/phylodynamics-animation/` *(replace once GitHub Pages is enabled)*
+**Live version:** [https://spread-project.github.io/phylodynamics-animation/](https://spread-project.github.io/phylodynamics-animation/)
 
 The whole thing is a single self-contained `index.html`, with no build step and no dependencies apart from two Google Fonts. It falls back to system fonts if they can't load.
 
