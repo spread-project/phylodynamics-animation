@@ -16,7 +16,7 @@ You may share and adapt this content, provided that:
 
 - **Attribution.** You give appropriate credit, link to the license and indicate
   whether changes were made. Suggested credit:
-  "Phylodynamics, animated" by <Your Name>, https://github.com/<you>/<repo>,
+  "Phylodynamics, animated" by spread-project, https://github.com/spread-project/phylodynamics-animation,
   licensed under CC BY-NC 4.0.
 - **NonCommercial.** You don't use it for commercial purposes.
 
