@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Phylodynamics, animated</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,750&family=Literata:opsz,wght@7..72,400;7..72,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EFF3F1; --surface:#FFFFFF; --ink:#172830; --muted:#5D6D74; --line:#C3CFCC;
+  --A:#1E9A5F; --C:#2D68D2; --G:#D08F0C; --T:#D2413A; --P:#7B4FC4;
+  --ui:"Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --read:"Literata", Georgia, "Times New Roman", serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F171B; --surface:#16222A; --ink:#E3ECE9; --muted:#93A4A9; --line:#2F424A;
+    --A:#3CC37F; --C:#6197F2; --G:#F0B43A; --T:#F0665E; --P:#A985EC;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F171B; --surface:#16222A; --ink:#E3ECE9; --muted:#93A4A9; --line:#2F424A;
+  --A:#3CC37F; --C:#6197F2; --G:#F0B43A; --T:#F0665E; --P:#A985EC;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--read);-webkit-font-smoothing:antialiased}
+main{max-width:720px;margin:0 auto;padding:20px 16px 110px}
+header h1{font-family:var(--ui);font-weight:750;font-size:clamp(2.2rem,8vw,3.4rem);letter-spacing:-0.03em;line-height:0.95;margin:8px 0 10px}
+header p{font-size:1rem;line-height:1.55;color:var(--muted);margin:0 0 18px;max-width:34em}
+.genome{display:flex;gap:3px;margin:0 0 14px;height:6px}
+.genome span{flex:1;border-radius:1px}
+.stage-wrap{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:10px 10px 12px}
+.steps{display:grid;grid-template-columns:repeat(9,1fr);gap:4px;margin-bottom:6px}
+.steps button{font-family:var(--ui);font-size:.8rem;font-weight:600;color:var(--muted);background:transparent;border:0;padding:8px 0 10px;position:relative;cursor:pointer;border-radius:6px}
+.steps button::after{content:"";position:absolute;left:4px;right:4px;bottom:3px;height:3px;border-radius:2px;background:var(--line)}
+.steps button .fill{position:absolute;left:4px;bottom:3px;height:3px;border-radius:2px;background:var(--ink);z-index:1;width:0}
+.steps button.done .fill{width:calc(100% - 8px)}
+.steps button[aria-current="step"]{color:var(--ink)}
+.steps button:focus-visible,.bar button:focus-visible,.panel button:focus-visible,.panel input:focus-visible{outline:2px solid var(--C);outline-offset:2px}
+#stage svg{display:block;width:100%;height:auto}
+.panel{border-top:1px solid var(--line);margin-top:8px;padding:12px 4px 2px;font-family:var(--ui);font-size:.9rem}
+.panel[hidden]{display:none}
+.row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:2px 12px;margin-bottom:10px}
+.row label{font-weight:600}
+.row output{font-variant-numeric:tabular-nums;color:var(--muted)}
+.row input[type=range]{grid-column:1 / -1;width:100%;accent-color:var(--C)}
+.check{display:flex;gap:8px;align-items:center;margin:4px 0 12px}
+.check input{accent-color:var(--C);width:18px;height:18px}
+.panel button{font-family:var(--ui);font-weight:600;font-size:.9rem;background:var(--ink);color:var(--bg);border:0;border-radius:999px;padding:10px 16px;cursor:pointer}
+.readout{color:var(--muted);margin:10px 0 0;line-height:1.45}
+article{padding:18px 4px 0}
+article h2{font-family:var(--ui);font-weight:650;font-size:1.35rem;letter-spacing:-0.01em;line-height:1.2;margin:0 0 10px}
+article p{font-size:1.02rem;line-height:1.68;margin:0 0 12px;max-width:36em}
+.bar{position:fixed;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px))}
+.bar .in{max-width:720px;margin:0 auto;display:flex;gap:8px}
+.bar button{font-family:var(--ui);font-weight:600;font-size:.95rem;border-radius:999px;padding:11px 14px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.bar button:disabled{opacity:.4;cursor:default}
+.bar .next{margin-left:auto;background:var(--ink);color:var(--bg);border-color:var(--ink);padding-left:22px;padding-right:22px}
+.refs{font-size:.85rem;color:var(--muted);line-height:1.55;padding:6px 4px 0}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="genome" aria-hidden="true" id="genome"></div>
+    <h1>Phylodynamics</h1>
+    <p>How the family tree of a virus’s genomes reveals when an epidemic started, how fast it spread and where it went. Nine short animations.</p>
+  </header>
+
+  <section class="stage-wrap" aria-label="Animation">
+    <div class="steps" id="steps"></div>
+    <div id="stage" role="img" aria-live="off"></div>
+    <div class="panel" id="bdPanel" hidden>
+      <div class="row"><label for="rR">Reproduction number R = λ/δ</label><output id="oR">2.0</output>
+        <input type="range" id="rR" min="0.8" max="3" step="0.1" value="2"></div>
+      <div class="row"><label for="rP">Sampling proportion p</label><output id="oP">0.50</output>
+        <input type="range" id="rP" min="0.1" max="1" step="0.05" value="0.5"></div>
+      <label class="check"><input type="checkbox" id="cI"> Intervention partway through (R drops to 0.8)</label>
+      <button id="bRun">Run a new epidemic</button>
+      <p class="readout" id="readout"></p>
+    </div>
+  </section>
+
+  <article>
+    <h2 id="title"></h2>
+    <p id="caption"></p>
+  </article>
+  <p class="refs">Further reading: Grenfell et al. 2004 (Science) coined the term; Volz, Koelle &amp; Bedford 2013 (PLoS Comput Biol) review the coalescent side; Stadler et al. 2013 (PNAS) introduced the birth–death skyline; BEAST 2 is the main Bayesian toolkit; To et al. 2016 (Syst Biol) describe LSD, Sagulenko et al. 2018 (Virus Evol) TreeTime, Ishikawa et al. 2019 (Mol Biol Evol) PastML, and Zhukova et al. 2023 (<a href="https://doi.org/10.1093/sysbio/syad059" target="_blank" rel="noopener" style="color:inherit">Syst Biol</a>) fast maximum-likelihood multi-type birth–death estimation (PyBDEI).</p>
+</main>
+
+<nav class="bar" aria-label="Step navigation">
+  <div class="in">
+    <button id="bPrev">Back</button>
+    <button id="bReplay">Replay</button>
+    <button id="bNext" class="next">Next</button>
+  </div>
+</nav>
+
+<script>
+(function(){
+"use strict";
+/* ---------- helpers ---------- */
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;var t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function expRand(r,rate){return -Math.log(1-r())/rate;}
+function gauss(r){return Math.sqrt(-2*Math.log(1-r()))*Math.cos(2*Math.PI*r());}
+var clamp=function(x,a,b){return Math.max(a,Math.min(b,x));};
+var seg=function(t,a,b){return clamp((t-a)/(b-a),0,1);};
+var ease=function(x){x=clamp(x,0,1);return x*x*(3-2*x);};
+var lerp=function(a,b,m){return a+(b-a)*m;};
+var f=function(n){return Math.round(n*10)/10;};
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function line(x1,y1,x2,y2,c,w,op,dash){return '<line x1="'+f(x1)+'" y1="'+f(y1)+'" x2="'+f(x2)+'" y2="'+f(y2)+'" style="stroke:'+c+';stroke-width:'+(w||1.4)+';opacity:'+(op==null?1:op)+';stroke-linecap:round'+(dash?';stroke-dasharray:'+dash:'')+'"/>';}
+function circ(x,y,r,fill,op,stroke,sw){return '<circle cx="'+f(x)+'" cy="'+f(y)+'" r="'+f(r)+'" style="fill:'+fill+';opacity:'+(op==null?1:op)+';stroke:'+(stroke||'none')+';stroke-width:'+(sw||0)+'"/>';}
+function rect(x,y,w,h,fill,op,rx,stroke,sw){return '<rect x="'+f(x)+'" y="'+f(y)+'" width="'+f(Math.max(w,0))+'" height="'+f(Math.max(h,0))+'" rx="'+(rx||0)+'" style="fill:'+fill+';opacity:'+(op==null?1:op)+';stroke:'+(stroke||'none')+';stroke-width:'+(sw||0)+'"/>';}
+function text(x,y,s,o){o=o||{};return '<text x="'+f(x)+'" y="'+f(y)+'" style="font-family:var(--ui);font-size:'+(o.size||11)+'px;font-weight:'+(o.weight||400)+';fill:'+(o.fill||'var(--ink)')+';opacity:'+(o.op==null?1:o.op)+'" text-anchor="'+(o.anchor||'start')+'"'+(o.rot?' transform="rotate('+o.rot+' '+f(x)+' '+f(y)+')"':'')+'>'+(o.raw?s:esc(s))+'</text>';}
+var NUC=['var(--A)','var(--C)','var(--G)','var(--T)'];
+
+/* decorative genome strip in header */
+(function(){var g=document.getElementById('genome'),r=rng(3),h='';for(var i=0;i<48;i++){var c=NUC[Math.floor(r()*4)];h+='<span style="background:'+c+';opacity:'+(r()<.8?.25:1)+'"></span>';}g.innerHTML=h;})();
+
+/* ---------- birth–death simulator ---------- */
+function simBD(o){
+  var r=rng(o.seed),B=[],lamAfter=o.lamAfter==null?o.lam:o.lamAfter,tC=o.tChange==null?Infinity:o.tChange,mig=o.mig||0;
+  function mk(parent,start,type){var b={id:B.length,parent:parent,start:start,end:null,kids:null,fate:null,type:type,cur:type,changes:[]};B.push(b);return b;}
+  var active=[mk(-1,0,0)],t=0;
+  while(active.length){
+    var L=t<tC?o.lam:lamAfter,n=active.length,tot=n*(L+o.delta+mig),dt=expRand(r,tot);
+    if(t<tC&&t+dt>=tC&&tC<o.T){t=tC;continue;}
+    t+=dt; if(t>=o.T)break;
+    var i=Math.floor(r()*n),b=active[i],u=r()*(L+o.delta+mig);
+    if(u<L){b.end=t;b.fate='birth';var c1=mk(b.id,t,b.cur),c2=mk(b.id,t,b.cur);b.kids=[c1,c2];active.splice(i,1,c1,c2);}
+    else if(u<L+o.delta){b.end=t;b.fate=r()<o.p?'sampled':'removed';active.splice(i,1);}
+    else{b.cur=1-b.cur;b.changes.push({t:t,type:b.cur});}
+    if(B.length>(o.max||400))return null;
+  }
+  active.forEach(function(b){b.end=o.T;b.fate='alive';});
+  return {branches:B,T:o.T};
+}
+function prepTree(s){
+  var B=s.branches,kept=new Array(B.length).fill(false),li=0,si=0;
+  for(var i=B.length-1;i>=0;i--){var b=B[i];kept[i]=b.kids?(kept[b.kids[0].id]||kept[b.kids[1].id]):b.fate==='sampled';}
+  (function af(b){if(b.kids){af(b.kids[0]);af(b.kids[1]);b.yf=(b.kids[0].yf+b.kids[1].yf)/2;}else b.yf=li++;})(B[0]);
+  (function ap(b){if(!kept[b.id])return;if(b.kids){var ks=b.kids.filter(function(k){return kept[k.id];});ks.forEach(ap);b.yp=ks.reduce(function(a,k){return a+k.yp;},0)/ks.length;}else b.yp=si++;})(B[0]);
+  s.kept=kept;s.nL=li;s.nS=si;
+  s.nInf=(B.length-1)/2+1;
+  s.nSeq=B.filter(function(b){return b.fate==='sampled';}).length;
+  return s;
+}
+function findTree(p,ok,seed0,tries){var last=null;for(var sd=seed0;sd<seed0+(tries||400);sd++){p.seed=sd;var s=simBD(p);if(!s)continue;prepTree(s);last=s;if(ok(s))return s;}return last;}
+function drawTree(s,o){
+  var B=s.branches,kept=s.kept,T=s.T,out='',tips='';
+  var X=function(t){return o.x0+(t/T)*(o.x1-o.x0);};
+  var yF=function(b){return o.y0+(b.yf+.5)/s.nL*(o.y1-o.y0);};
+  var yP=function(b){return o.y0+(b.yp+.5)/Math.max(s.nS,1)*(o.y1-o.y0);};
+  var Y=function(b){return kept[b.id]?lerp(yF(b),yP(b),o.mix):yF(b);};
+  var sw=o.sw||1.4;
+  for(var i=0;i<B.length;i++){
+    var b=B[i];if(b.start>=o.tNow)continue;
+    var k=kept[b.id],op=k?1:o.fade;if(op<0.01)continue;
+    var e=Math.min(b.end,o.tNow),y=Y(b),ts=b.start,ty=b.type;
+    var ch=b.changes.filter(function(c){return c.t<e;});
+    for(var j=0;j<ch.length;j++){out+=line(X(ts),y,X(ch[j].t),y,o.col(b,k,ty),sw,op);ts=ch[j].t;ty=ch[j].type;}
+    out+=line(X(ts),y,X(e),y,o.col(b,k,ty),sw,op);
+    if(o.markMig&&k)ch.forEach(function(c){tips+=circ(X(c.t),y,2.4,'var(--surface)',1,o.col(b,k,c.type),1.3);});
+    if(b.end<=o.tNow){
+      if(b.kids){var a=b.kids[0],c=b.kids[1],both=kept[a.id]&&kept[c.id],cop=both?1:o.fade;
+        if(cop>0.01)out+=line(X(b.end),Y(a),X(b.end),Y(c),o.col(b,both,ty),sw,cop);}
+      else if(b.fate==='sampled'&&(o.tipOp==null||o.tipOp>0))tips+=circ(X(b.end),y,o.tipR||2.6,o.tipCol?o.tipCol(ty):o.col(b,true,ty),o.tipOp==null?1:o.tipOp);
+      else if(b.fate==='removed'&&o.fade>0.05&&o.showRemoved)out+=line(X(b.end),y-2.2,X(b.end),y+2.2,'var(--muted)',1,o.fade*.8);
+    }
+  }
+  return out+tips;
+}
+
+/* ---------- Scene 1: outbreak on a grid ---------- */
+var S1=(function(){
+  var r=rng(11),cols=13,rows=8,N=cols*rows;
+  var pos=function(i){return [34+(i%cols)*28,64+Math.floor(i/cols)*27];};
+  var nb=function(i){var c=i%cols,rw=Math.floor(i/cols),res=[];[[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]].forEach(function(d){var cc=c+d[0],rr=rw+d[1];if(cc>=0&&cc<cols&&rr>=0&&rr<rows)res.push(rr*cols+cc);});return res;};
+  var W={},arr=new Array(N).fill(Infinity),par=new Array(N).fill(-1),done=new Array(N).fill(false),src=4*cols+6;arr[src]=0;
+  for(var it=0;it<N;it++){var u=-1;for(var i=0;i<N;i++)if(!done[i]&&(u<0||arr[i]<arr[u]))u=i;done[u]=true;
+    nb(u).forEach(function(v){var key=Math.min(u,v)+'-'+Math.max(u,v);if(!(key in W)){var diag=(Math.abs(u-v)!==1&&Math.abs(u-v)!==cols);W[key]=(0.25+expRand(r,1))*(diag?1.4:1);}var nt=arr[u]+W[key];if(nt<arr[v]){arr[v]=nt;par[v]=u;}});}
+  var order=Array.from({length:N},function(_,i){return i;}).sort(function(a,b){return arr[a]-arr[b];});
+  var clade=new Array(N),founder=new Array(N).fill(false),nC=1,fr={5:1,16:1,31:1,50:1};clade[src]=0;
+  order.forEach(function(i,rank){if(i===src)return;if(fr[rank]){clade[i]=nC++;founder[i]=true;}else clade[i]=clade[par[i]];});
+  var CC=['var(--C)','var(--A)','var(--G)','var(--T)','var(--P)'],maxA=arr[order[N-1]];
+  return {render:function(t){
+    var tau=seg(t,0.3,8)*maxA*1.01,out='';
+    out+=text(200,28,'Each dot is a person. Color is the virus lineage they carry.',{anchor:'middle',fill:'var(--muted)'});
+    for(var i=0;i<N;i++){if(i===src||arr[i]>tau)continue;var p=pos(i),q=pos(par[i]);out+=line(q[0],q[1],p[0],p[1],CC[clade[i]],1.4,.4);}
+    for(i=0;i<N;i++){var P=pos(i);
+      if(arr[i]>tau){out+=circ(P[0],P[1],3.4,'none',1,'var(--line)',1.2);continue;}
+      var age=(tau-arr[i])/maxA;
+      if(age<0.08)out+=circ(P[0],P[1],5+age*120,'none',1-age/0.08,CC[clade[i]],1.2);
+      out+=circ(P[0],P[1],5.2,CC[clade[i]],1);
+      if(founder[i])out+=circ(P[0],P[1],9,'none',1,CC[clade[i]],1.3);
+    }
+    var endA=seg(t,8.3,9.3);
+    out+=circ(128,284,5,'none',endA,'var(--ink)',1.3)+text(140,288,'a new mutation starts a new lineage',{fill:'var(--muted)',op:endA});
+    return out;}, dur:9.5};
+})();
+
+/* ---------- Scene 2: transmission chain to phylogeny ---------- */
+var tree2=findTree({lam:1.8,delta:1,p:0.45,T:4.2,max:400},function(s){return s.branches.length>=60&&s.branches.length<=170&&s.nS>=9&&s.nS<=20;},20,600);
+var S2={dur:12.5,render:function(t){
+  var s=tree2,T=s.T,tNow=T*seg(t,0.3,6.3)+(t>6.3?1:0);
+  var ph2=seg(t,6.6,7.4),ph3=ease(seg(t,7.6,9)),ph4=ease(seg(t,9.4,12));
+  var fade=1-0.7*ph3-0.25*ph4,out='';
+  out+=drawTree(s,{x0:24,x1:382,y0:46,y1:258,tNow:tNow,mix:ph4,fade:fade,sw:1.3,tipOp:ph2,tipR:3,showRemoved:true,
+    col:function(b,k){return(k&&ph3>0)?'var(--C)':'var(--ink)';},tipCol:function(){return 'var(--C)';}});
+  var lab=t<6.6?'Transmission: each infection splits a lineage in two':t<9.4?'Sampling: only some infections are sequenced':'What we can reconstruct: the phylogeny';
+  out+=text(200,26,lab,{anchor:'middle',weight:600,size:12});
+  out+=line(24,274,382,274,'var(--line)',1)+text(24,290,'outbreak starts',{fill:'var(--muted)',size:10})+text(382,290,'today',{fill:'var(--muted)',size:10,anchor:'end'});
+  out+=circ(158,286,3,'var(--C)',ph2)+text(165,290,'sequenced',{fill:'var(--muted)',size:10,op:ph2});
+  out+=line(232,283,232,289,'var(--muted)',1,ph2*(1-ph4))+text(238,290,'never sequenced',{fill:'var(--muted)',size:10,op:ph2*(1-ph4)});
+  return out;}};
+
+/* ---------- Scene 3: molecular clock ---------- */
+var S3=(function(){
+  var dates=[.15,.3,.42,.55,.66,.8,.93],muts=[6,7,10,10,13,13,16],MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var r=rng(5),perm=Array.from({length:40},function(_,i){return i;});for(var i=39;i>0;i--){var j=Math.floor(r()*(i+1)),tmp=perm[i];perm[i]=perm[j];perm[j]=tmp;}
+  var sc=perm.map(function(){return NUC[Math.floor(r()*4)];});
+  var n=dates.length,mx=dates.reduce(function(a,b){return a+b;})/n,my=muts.reduce(function(a,b){return a+b;})/n,sxy=0,sxx=0;
+  for(i=0;i<n;i++){sxy+=(dates[i]-mx)*(muts[i]-my);sxx+=(dates[i]-mx)*(dates[i]-mx);}
+  var slope=sxy/sxx,icpt=my-slope*mx,xint=-icpt/slope;
+  var PX=function(x){return 48+(x+0.45)/1.45*336;},PY=function(y){return 270-y/18*92;};
+  return {dur:8,render:function(t){
+    var out=text(200,26,'Genomes sampled on different dates',{anchor:'middle',fill:'var(--muted)'});
+    for(var i=0;i<n;i++){var a=ease(seg(t,0.3+i*0.45,0.8+i*0.45));if(a<=0)continue;var y=40+i*15;
+      out+=text(12,y+8,MON[Math.floor(dates[i]*12)],{size:10,fill:'var(--muted)',op:a});
+      out+=rect(48,y+1,336*a,8,'var(--line)',.7,2);
+      for(var k=0;k<muts[i];k++){var sx=48+perm[k]*8.4;if(sx<48+336*a)out+=rect(sx+1,y-1,6,12,sc[k],a,1.5);}
+      out+=circ(PX(dates[i]),PY(muts[i]),3.6,'var(--ink)',a);
+    }
+    out+=line(PX(-0.45),270,384,270,'var(--line)',1)+line(PX(0),178,PX(0),270,'var(--line)',1,1,'2 3');
+    out+=text(48,168,'mutations from the root',{size:10,fill:'var(--muted)'});
+    out+=text(PX(0),284,'Jan',{size:10,fill:'var(--muted)',anchor:'middle'})+text(PX(.5),284,'Jul',{size:10,fill:'var(--muted)',anchor:'middle'})+text(PX(1),284,'Dec',{size:10,fill:'var(--muted)',anchor:'middle'});
+    out+=text(PX(-0.3),284,'last year',{size:10,fill:'var(--muted)',anchor:'middle'});
+    var L=ease(seg(t,3.8,5.8));
+    if(L>0){var xa=1,xb=lerp(1,xint,L);out+=line(PX(xa),PY(icpt+slope*xa),PX(xb),PY(icpt+slope*xb),'var(--T)',2);}
+    var e=seg(t,5.8,6.6);
+    if(e>0){out+=circ(PX(xint),270,5,'var(--T)',e)+text(PX(xint)+8,262,'common ancestor ≈ '+MON[Math.round((xint+1)*12)%12]+' last year',{size:10,fill:'var(--T)',op:e,weight:600});
+      out+=text(PX(0.62),PY(icpt+slope*0.62)-16,'slope = mutation rate',{size:10,fill:'var(--T)',op:e,weight:600,anchor:'end'});}
+    return out;}};
+})();
+
+/* ---------- Scene 4: coalescent ---------- */
+function simCoal(n,r0,N0,seed){
+  var R=rng(seed),lin=[],segs=[],joins=[],s=0;for(var i=0;i<n;i++)lin.push({x:i,start:0});
+  while(lin.length>1){var k=lin.length,c=k*(k-1)/2,E=expRand(R,1);
+    var w=r0===0?E*N0/c:Math.log(Math.exp(r0*s)+E*r0*N0/c)/r0-s;s+=w;
+    var j=Math.floor(R()*(k-1)),a=lin[j],b=lin[j+1];
+    segs.push({x:a.x,s0:a.start,s1:s},{x:b.x,s0:b.start,s1:s});joins.push({x0:a.x,x1:b.x,s:s});
+    lin.splice(j,2,{x:(a.x+b.x)/2,start:s});}
+  segs.push({x:lin[0].x,s0:s,s1:s*1.06});
+  return {segs:segs,joins:joins,tmrca:s,r:r0};
+}
+var coalA=simCoal(9,0,1,4),coalB=simCoal(9,2.2,25,9);
+function drawCoal(c,x0,w,p,title,note,noteOp){
+  var sMax=c.tmrca*1.08,sNow=p*sMax,yB=262,yT=66,out='';
+  var Y=function(s){return yB-s/sMax*(yB-yT);},X=function(i){return x0+12+i*(w-24)/8;},cx=x0+w/2;
+  var pts=[],pts2=[];for(var q=0;q<=30;q++){var s=q/30*sMax,wd=(c.r?Math.max(Math.exp(-c.r*s),0.03):1)*(w-6)/2;pts.push(f(cx-wd)+','+f(Y(s)));pts2.unshift(f(cx+wd)+','+f(Y(s)));}
+  out+='<polygon points="'+pts.concat(pts2).join(' ')+'" style="fill:var(--C);opacity:.09"/>';
+  c.segs.forEach(function(g){if(g.s0>=sNow)return;out+=line(X(g.x),Y(g.s0),X(g.x),Y(Math.min(g.s1,sNow)),'var(--ink)',1.6);});
+  c.joins.forEach(function(j){if(j.s>sNow)return;out+=line(X(j.x0),Y(j.s),X(j.x1),Y(j.s),'var(--ink)',1.6);var age=(sNow-j.s)/sMax;if(age<0.07)out+=circ((X(j.x0)+X(j.x1))/2,Y(j.s),4+age*90,'none',1-age/0.07,'var(--T)',1.5);});
+  for(var i=0;i<9;i++)out+=circ(X(i),yB,3.2,'var(--C)');
+  if(p>0&&p<1)out+=line(x0,Y(sNow),x0+w,Y(sNow),'var(--T)',1,.7,'3 3');
+  out+=text(cx,54,title,{anchor:'middle',weight:600,size:12});
+  out+=text(cx,282,'samples today',{anchor:'middle',size:10,fill:'var(--muted)',op:1-noteOp});
+  out+=text(cx,282,note,{anchor:'middle',size:10,fill:'var(--T)',weight:600,op:noteOp});
+  return out;
+}
+var S4={dur:9.5,render:function(t){
+  var p=seg(t,0.6,7.6),nOp=seg(t,7.9,8.7),out='';
+  out+=text(200,24,'merge rate = k(k−1)/2 ÷ Ne(t)',{anchor:'middle',weight:600,size:12.5});
+  out+=text(200,38,'shaded width = effective population size Ne',{anchor:'middle',size:10,fill:'var(--muted)'});
+  out+=drawCoal(coalA,14,180,p,'Constant size','merges spread out',nOp);
+  out+=drawCoal(coalB,206,180,p,'Growing epidemic','star-like, long tips',nOp);
+  out+=line(200,250,200,80,'var(--muted)',1,.6)+'<path d="M196,86 L200,78 L204,86" style="fill:none;stroke:var(--muted);stroke-width:1;opacity:.6"/>';
+  out+=text(197,170,'back in time',{size:9.5,fill:'var(--muted)',anchor:'middle',rot:-90});
+  return out;}};
+
+/* ---------- Scene 5: interactive birth–death ---------- */
+var S5state={R:2,p:0.5,interv:false,seed:100,sim:null,tC:null};
+function runBD(){
+  var st=S5state,R=st.R,T,tC=null;
+  if(st.interv){tC=R>1.05?Math.min(5,Math.log(45)/(R-1)):3.5;T=tC+3;}
+  else T=R>1.05?Math.min(7,Math.log(70)/(R-1)):7;
+  var p={lam:R,delta:1,p:st.p,T:T,max:520};if(st.interv){p.tChange=tC;p.lamAfter=0.8;}
+  st.seed+=37;
+  st.sim=findTree(p,function(s){return s.branches.length>=(R<1?9:25);},st.seed,250);st.tC=tC;
+  var s=st.sim;
+  document.getElementById('readout').textContent=s?('This run: '+s.nInf+' infections, '+s.nSeq+' sequenced. With δ = 1, the transmission rate λ = '+R.toFixed(1)+' and the growth rate λ − δ = '+(R-1).toFixed(1)+' per unit time.'):'';
+  restart();
+}
+var S5={dur:5,render:function(t){
+  var st=S5state,s=st.sim;if(!s)return '';
+  var tNow=s.T*seg(t,0.1,4.6)+(t>4.6?1:0),big=s.nL>110,out='';
+  out+=drawTree(s,{x0:18,x1:384,y0:44,y1:262,tNow:tNow,mix:0,fade:.38,sw:big?.9:1.3,tipR:big?2:2.6,
+    col:function(b,k){return k?'var(--C)':'var(--muted)';}});
+  if(st.tC!=null){var xc=18+st.tC/s.T*366;out+=line(xc,40,xc,264,'var(--T)',1.2,.9,'4 3')+text(xc+4,40,'R drops to 0.8',{size:10,fill:'var(--T)',weight:600});}
+  out+=text(18,24,'Grey: transmission nobody sees. Blue: the tree the sequences reveal.',{size:10.5,fill:'var(--muted)'});
+  out+=line(18,274,384,274,'var(--line)',1)+text(18,290,'time →',{size:10,fill:'var(--muted)'});
+  out+=text(384,290,'λ transmit, δ stop being infectious, p sequenced',{size:10,fill:'var(--muted)',anchor:'end'});
+  return out;}};
+
+/* ---------- Scene 6: structured / multi-type ---------- */
+var tree6=findTree({lam:1.8,delta:1,p:0.6,T:4.2,mig:0.3,max:320},function(s){
+  if(s.nS<10||s.nS>26)return false;var a=0,b=0;s.branches.forEach(function(x){if(x.fate==='sampled'){var ty=x.changes.length?x.changes[x.changes.length-1].type:x.type;ty?b++:a++;}});return a>=4&&b>=4;},300,800);
+var S6={dur:8,render:function(t){
+  var s=tree6,tNow=s.T*seg(t,0.3,6.5)+(t>6.5?1:0),out='';
+  out+=drawTree(s,{x0:20,x1:382,y0:48,y1:262,tNow:tNow,mix:1,fade:0,sw:1.8,tipR:3.2,markMig:true,
+    col:function(b,k,ty){return ty?'var(--G)':'var(--C)';}});
+  out+=circ(60,24,5,'var(--C)')+text(70,28,'Region A',{size:11})+circ(150,24,5,'var(--G)')+text(160,28,'Region B',{size:11});
+  out+=circ(240,24,4,'var(--surface)',1,'var(--ink)',1.3)+text(250,28,'lineage moves',{size:11});
+  out+=line(20,274,382,274,'var(--line)',1)+text(20,290,'time →',{size:10,fill:'var(--muted)'});
+  var e=seg(t,6.8,7.6);out+=text(382,290,'root location is estimated too',{size:10,fill:'var(--muted)',anchor:'end',op:e});
+  return out;}};
+
+/* ---------- Scene 7: Bayesian inference ---------- */
+var S7=(function(){
+  var r=rng(21),xs=[],x=3.6;for(var i=0;i<260;i++){x=x+0.12*(1.6-x)+0.09*gauss(r);xs.push(x);}
+  var strips=[];for(i=0;i<4;i++){var row=[];for(var k=0;k<5+i*2;k++)row.push([Math.floor(r()*18),NUC[Math.floor(r()*4)]]);strips.push(row);}
+  function box(x,title,a){return rect(x,12,110,86,'var(--surface)',a,8,'var(--line)',1.2)+text(x+55,30,title,{anchor:'middle',weight:600,size:11,op:a});}
+  function arrow(x,a){return line(x,55,x+18,55,'var(--muted)',1.3,a)+'<path d="M'+(x+14)+',51 L'+(x+19)+',55 L'+(x+14)+',59" style="fill:none;stroke:var(--muted);stroke-width:1.3;opacity:'+a+'"/>';}
+  var Y=function(v){return 280-(v-0.8)/3.2*92;};
+  return {dur:9.5,render:function(t){
+    var a1=seg(t,0.2,0.7),a2=seg(t,0.9,1.4),a3=seg(t,1.6,2.1),out='';
+    out+=box(8,'Dated genomes',a1);
+    strips.forEach(function(row,i){var y=44+i*12;out+=rect(18,y,90,6,'var(--line)',a1*.7,2);row.forEach(function(m){out+=rect(18+m[0]*5,y-1,4,8,m[1],a1,1);});});
+    out+=arrow(121,a2)+box(143,'Time tree',a2);
+    var tr=[[155,70,175,70],[175,48,175,88],[175,48,240,48],[175,88,200,88],[200,78,200,96],[200,78,240,78],[200,96,240,96],[210,48,210,62],[210,62,240,62]];
+    tr.forEach(function(l){out+=line(l[0],l[1],l[2],l[3],'var(--ink)',1.4,a2);});
+    out+=arrow(256,a3)+box(278,'Parameters',a3);
+    [4,9,16,20,14,7,3].forEach(function(h,i){out+=rect(298+i*10,90-h*2.4,8,h*2.4,'var(--C)',a3,1);});
+    out+=text(333,48,'R, Ne, rates',{anchor:'middle',size:10,fill:'var(--muted)',op:a3});
+    var fa=seg(t,2.3,3);
+    out+=text(200,124,'<tspan style="fill:var(--ink)">P(tree, θ | data) ∝ </tspan><tspan style="fill:var(--A)">P(data | tree)</tspan><tspan style="fill:var(--ink)"> × </tspan><tspan style="fill:var(--C)">P(tree | θ)</tspan><tspan style="fill:var(--ink)"> × </tspan><tspan style="fill:var(--G)">P(θ)</tspan>',{anchor:'middle',size:12,weight:600,op:fa,raw:true});
+    var lab=[['var(--A)','likelihood: substitution + molecular clock model'],['var(--C)','tree prior: coalescent or birth–death model'],['var(--G)','priors on the parameters θ']];
+    lab.forEach(function(l,i){out+=circ(40,138+i*13,3.5,l[0],fa)+text(50,142+i*13,l[1],{size:10.5,fill:'var(--muted)',op:fa});});
+    var m=Math.floor(260*seg(t,3.4,8.4));
+    out+=text(34,184,'MCMC samples of R',{size:10,fill:'var(--muted)'})+text(290,184,'posterior',{size:10,fill:'var(--muted)'});
+    out+=rect(34,188,30/260*232,92,'var(--line)',.35)+line(34,280,266,280,'var(--line)',1)+line(282,280,388,280,'var(--line)',1);
+    [1,2,3].forEach(function(v){out+=text(28,Y(v)+3,v,{size:9,fill:'var(--muted)',anchor:'end'});});
+    if(m>1){var d='M';for(var i=0;i<m;i++)d+=f(34+i/259*232)+','+f(Y(xs[i]))+(i<m-1?' L':'');out+='<path d="'+d+'" style="fill:none;stroke:var(--ink);stroke-width:1;opacity:.85"/>';}
+    var bins=new Array(32).fill(0),mxb=1;for(i=30;i<m;i++){var bi=Math.floor((xs[i]-0.8)/0.1);if(bi>=0&&bi<32){bins[bi]++;mxb=Math.max(mxb,bins[bi]);}}
+    bins.forEach(function(c,i){if(c)out+=rect(282,Y(0.8+(i+1)*0.1),c/Math.max(mxb,12)*100,92/32-0.6,'var(--C)',1,1);});
+    return out;}};
+})();
+
+
+/* ---------- Scene 7b: maximum-likelihood pipeline ---------- */
+var S7b=(function(){
+  var s=tree6,B=s.branches,K=s.kept,r=rng(33),kb=B.filter(function(b){return K[b.id];});
+  var endS=[],maxS=0,tMax=0;
+  kb.forEach(function(b){var st=b.parent<0?0:endS[b.parent];endS[b.id]=st+(b.end-b.start)*(0.45+r()*1.2);if(!b.kids){maxS=Math.max(maxS,endS[b.id]);tMax=Math.max(tMax,b.end);}});
+  var stEnd=function(b){return b.changes.length?b.changes[b.changes.length-1].type:b.type;};
+  var inner=kb.filter(function(b){return b.kids;}).sort(function(a,b){return b.end-a.end;}),rev={};
+  inner.forEach(function(b,i){rev[b.id]=0.15+0.85*i/Math.max(inner.length-1,1);});
+  kb.forEach(function(b){if(!b.kids)rev[b.id]=0;});
+  var both=function(b){return b.kids&&K[b.kids[0].id]&&K[b.kids[1].id];};
+  var unsure=function(b){var a=b.kids[0],c=b.kids[1];return stEnd(a)!==stEnd(c)||stEnd(a)!==stEnd(b);};
+  var ab=0,ba=0;kb.forEach(function(b){b.changes.forEach(function(c){c.type?ab++:ba++;});});
+  var x0=22,x1=380,y0=50,y1=234,CL=['var(--C)','var(--G)'];
+  var Lf=function(x){return .55*Math.exp(-Math.pow((x-.25)/.09,2))+Math.exp(-Math.pow((x-.68)/.12,2))+.25*Math.exp(-Math.pow((x-.45)/.07,2));};
+  function pie(x,y,rad){return '<path d="M'+f(x)+','+f(y-rad)+' A'+rad+','+rad+' 0 0 0 '+f(x)+','+f(y+rad)+' Z" style="fill:var(--C)"/><path d="M'+f(x)+','+f(y-rad)+' A'+rad+','+rad+' 0 0 1 '+f(x)+','+f(y+rad)+' Z" style="fill:var(--G)"/>';}
+  return {dur:12.2,render:function(t){
+    var out='',lab,tools;
+    if(t<3.1){
+      var fo=1-seg(t,2.6,3.0),q=seg(t,0.2,2.4),GX=function(x){return 40+x*330;},GY=function(v){return 230-v*150;},d='M';
+      for(var i=0;i<=80;i++){var x=i/80;d+=f(GX(x))+','+f(GY(Lf(x)))+(i<80?' L':'');}
+      out+='<g style="opacity:'+fo+'"><path d="'+d+'" style="fill:none;stroke:var(--line);stroke-width:2"/>';
+      out+=line(40,234,370,234,'var(--line)',1)+text(205,250,'tree space (topologies and branch lengths)',{anchor:'middle',size:10,fill:'var(--muted)'});
+      out+=text(34,150,'log-likelihood',{size:10,fill:'var(--muted)',anchor:'middle',rot:-90});
+      var xp=q<.35?lerp(.05,.25,ease(q/.35)):q<.5?.25:q<.55?.5:lerp(.5,.68,ease(Math.min((q-.55)/.3,1)));
+      if(q>=.5)out+='<path d="M'+f(GX(.25))+','+f(GY(Lf(.25)))+' Q'+f(GX(.375))+','+f(GY(.95))+' '+f(GX(.5))+','+f(GY(Lf(.5)))+'" style="fill:none;stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3"/>';
+      if(q>.3)out+=text(GX(.25),GY(Lf(.25))-10,'local optimum',{anchor:'middle',size:10,fill:'var(--muted)'});
+      if(q>.52&&q<.8)out+=text(GX(.43),GY(.95)-6,'perturb and retry',{anchor:'middle',size:10,fill:'var(--muted)'});
+      out+=circ(GX(xp),GY(Lf(xp)),5.5,'var(--T)');
+      if(q>=.88)out+=text(GX(.68),GY(Lf(.68))-12,'maximum-likelihood tree',{anchor:'middle',size:10.5,weight:600,fill:'var(--T)'});
+      out+='</g>';
+      lab='Search for the single best-scoring tree';tools='IQ-TREE, RAxML-NG, FastTree';
+    }
+    if(t>=3.1){
+      var g=ease(seg(t,3.1,5)),m=ease(seg(t,5.4,7.4)),pm=seg(t,7.8,10.3),xc=x0+g*(x1-x0);
+      var XE=function(b){return lerp(x0+endS[b.id]/maxS*(x1-x0),x0+b.end/tMax*(x1-x0),m);};
+      var XS=function(b){return b.parent<0?x0:XE(B[b.parent]);};
+      var Y=function(b){return y0+(b.yp+.5)/s.nS*(y1-y0);};
+      var col=function(b){return pm>0&&pm>=rev[b.id]?CL[stEnd(b)]:'var(--ink)';},nodes='';
+      kb.forEach(function(b){var xs=XS(b),xe=XE(b),y=Y(b);if(xs>=xc)return;
+        out+=line(xs,y,Math.min(xe,xc),y,col(b),1.7);
+        if(xe>xc)return;
+        if(both(b)){out+=line(xe,Y(b.kids[0]),xe,Y(b.kids[1]),col(b),1.7);
+          if(pm>0&&pm>=rev[b.id])nodes+=unsure(b)?pie(xe,y,4.2):circ(xe,y,3.6,CL[stEnd(b)]);}
+        else if(!b.kids)nodes+=circ(xe,y,3,pm>0?CL[stEnd(b)]:'var(--ink)');
+      });
+      out+=nodes;
+      out+=line(x0,242,x1,242,'var(--line)',1);
+      out+=text(x0,256,'substitutions per site →',{size:10,fill:'var(--muted)',op:1-m})+text(x0,256,'calendar time →',{size:10,fill:'var(--muted)',op:m});
+      if(t<5.4){lab='Maximum-likelihood tree: branch lengths in substitutions';tools='IQ-TREE, RAxML-NG, FastTree';}
+      else if(t<7.8){lab='Root and date it using sampling times';tools='LSD2 (also inside IQ-TREE 2), TreeTime';}
+      else if(t<10.6){lab='Reconstruct ancestral locations';tools='PastML, TreeTime mugration';}
+      else{lab='Fit epidemiological parameters on this fixed tree';tools='TreeTime skyline, PyBDEI (ML birth–death), PhyloDeep';}
+      var lg=seg(t,7.8,8.4)*(1-seg(t,10.4,10.8));
+      out+=circ(26,282,4,'var(--C)',lg)+text(34,286,'Region A',{size:10,op:lg})+circ(96,282,4,'var(--G)',lg)+text(104,286,'Region B',{size:10,op:lg});
+      out+='<g style="opacity:'+lg+'">'+pie(166,282,4.2)+'</g>'+text(174,286,'uncertain: several states kept',{size:10,op:lg});
+      var rs=seg(t,10.6,11.4);
+      out+=text(22,278,'Clock rate and root date from step 2; '+ab+' moves A→B and '+ba+' B→A from step 3.',{size:10,op:rs});
+      out+=text(22,292,'Fast enough for 100,000s of genomes; uncertainty added back by bootstrapping.',{size:10,fill:'var(--muted)',op:rs});
+    }
+    out=text(200,20,lab,{anchor:'middle',weight:600,size:12})+text(200,34,tools,{anchor:'middle',size:10.5,fill:'var(--muted)'})+out;
+    return out;}};
+})();
+
+/* ---------- Scene 8: outputs ---------- */
+var S8=(function(){
+  var mid=[2.5,2.2,1.3,0.75,0.8,1.15],err=[0.55,0.35,0.25,0.15,0.15,0.3],M=['Jan','Feb','Mar','Apr','May','Jun'];
+  var X=function(i){return 44+i*56;},Y=function(v){return 240-v/3.5*186;};
+  var up=[],lo=[],med='M';for(var i=0;i<6;i++){up.push(f(X(i))+','+f(Y(mid[i]+err[i])),f(X(i+1))+','+f(Y(mid[i]+err[i])));lo.unshift(f(X(i+1))+','+f(Y(mid[i]-err[i])),f(X(i))+','+f(Y(mid[i]-err[i])));med+=f(X(i))+','+f(Y(mid[i]))+' L'+f(X(i+1))+','+f(Y(mid[i]))+(i<5?' L':'');}
+  var r=rng(8),rug=[];[3,8,14,10,6,5].forEach(function(c,i){for(var k=0;k<c;k++)rug.push(X(i)+r()*56);});
+  return {dur:6.5,render:function(t){
+    var p=ease(seg(t,0.3,5)),out='';
+    out+=text(44,24,'Estimated R through time',{weight:600,size:12})+text(44,38,'median and 95% credible interval',{size:10,fill:'var(--muted)'});
+    out+='<clipPath id="c8"><rect x="40" y="40" width="'+f(p*345)+'" height="250"/></clipPath>';
+    out+=line(44,240,380,240,'var(--line)',1);
+    [0,1,2,3].forEach(function(v){out+=text(36,Y(v)+3,v,{size:9.5,fill:'var(--muted)',anchor:'end'});});
+    M.forEach(function(m,i){out+=text(X(i)+28,254,m,{size:10,fill:'var(--muted)',anchor:'middle'});});
+    out+='<g clip-path="url(#c8)"><polygon points="'+up.concat(lo).join(' ')+'" style="fill:var(--C);opacity:.2"/>';
+    out+='<path d="'+med+'" style="fill:none;stroke:var(--C);stroke-width:2.2"/>';
+    rug.forEach(function(x){out+=line(x,264,x,272,'var(--ink)',1,.6);});
+    out+='</g>';
+    out+=line(44,Y(1),380,Y(1),'var(--T)',1.2,.9,'5 4')+text(380,Y(1)-5,'R = 1',{size:10,fill:'var(--T)',anchor:'end',weight:600});
+    var e=seg(t,3,3.6);out+=line(X(3),58,X(3),240,'var(--ink)',1,e*.6,'2 3')+text(X(3)+5,66,'intervention',{size:10,op:e});
+    out+=text(44,288,'sequenced genomes',{size:10,fill:'var(--muted)',op:seg(t,1,2)});
+    return out;}};
+})();
+
+/* ---------- scene list ---------- */
+var scenes=[
+ {s:S1,title:'Epidemics write themselves into genomes',caption:'Fast-evolving pathogens such as SARS-CoV-2, influenza, HIV and Ebola pick up mutations on the same timescale as they spread between people. The genomes sampled from patients therefore carry a record of who is related to whom, and how long ago they shared an ancestor. Phylodynamics reads that record to work out how an epidemic grew, shrank and moved.'},
+ {s:S2,title:'A transmission chain becomes a tree',caption:'Every transmission is a branching event: one infected lineage becomes two. Only some infections are ever sequenced, so the tree we can reconstruct keeps just the lineages that lead to sampled genomes. Its branching times still echo the hidden transmission process, and that is what phylodynamic models exploit. (Branch points in the virus tree are close to, but not exactly, transmission events, because each host carries some diversity of its own.)'},
+ {s:S3,title:'The molecular clock puts dates on the tree',caption:'Genomes collected later have had more time to accumulate mutations since their common ancestor. Plotting divergence from the root against sampling date gives roughly a straight line: the slope estimates the substitution rate, and where the line reaches zero estimates when the common ancestor lived (the TMRCA). Real analyses fit the clock, a substitution model and the tree together, but this root-to-tip check shows whether the data contain enough temporal signal to try.'},
+ {s:S4,title:'Coalescent models look backward in time',caption:'The coalescent follows sampled lineages back into the past until they merge. With k lineages, some pair merges at a rate of k(k−1)/2 divided by the effective population size Ne. A small population merges lineages quickly, a large one slowly. A growing epidemic was small in the past, so its lineages collapse together deep in the tree, leaving a star-like shape with long tips. Skyline methods turn the waiting times between merges into an estimate of Ne through time, which for an epidemic roughly tracks the number of infected people divided by the rate at which they transmit.'},
+ {s:S5,title:'Birth–death models run forward in time',caption:'Birth–death models describe the epidemic directly: each infected lineage transmits at rate λ, stops being infectious at rate δ, and is sequenced with probability p when it does. The shape of the sampled tree then informs the effective reproduction number R = λ/δ and the growth rate λ − δ. Skyline versions let R change between time intervals, which is how genomic studies measure the effect of interventions. Move the sliders and rerun to see how R, sampling and an intervention change the tree.',bd:true},
+ {s:S6,title:'Structured models add places and groups',caption:'Real epidemics have structure: cities, countries, age groups, host species. Multi-type birth–death and structured coalescent models let each lineage carry a state that can change along a branch. Fitting them estimates migration rates between locations and the probable location of every ancestor. This is phylogeography, the approach used to trace introductions of SARS-CoV-2 variants between countries.'},
+ {s:S7,title:'Everything is estimated together',caption:'In practice the tree is never known; it is inferred along with everything else. Software such as BEAST 2 combines a substitution and clock model (how sequences change along a tree) with a tree prior (coalescent or birth–death) and priors on each parameter. Markov chain Monte Carlo then explores thousands of trees and parameter values in proportion to their posterior probability. The early samples, before the chain settles, are discarded as burn-in, and uncertainty about the tree carries through into the epidemiological estimates.'},
+ {s:S8,title:'What comes out, and what can go wrong',caption:'The results are posterior distributions: R and Ne through time, dates of introduction, migration rates. They complement case counts, which miss undetected infections but cover far more people. The main pitfalls are sampling that is uneven across places or time, too little genetic diversity to resolve fast-moving events, parameters that trade off against each other (the sampling proportion, R and the infectious period are hard to separate, so priors matter), and recombination or selection, which break the models’ assumptions.'},
+ {s:S7b,title:'Maximum likelihood: fast, one step at a time',caption:'Bayesian analyses slow down beyond a few thousand genomes, so large datasets are often analysed step by step with maximum likelihood. First a program such as IQ-TREE, RAxML-NG or FastTree searches for the single tree that best explains the alignment, with branch lengths in substitutions per site. LSD2 (built into IQ-TREE 2) or TreeTime then uses the sampling dates to root the tree and rescale it to calendar time, estimating the clock rate and the date of the common ancestor. PastML or TreeTime’s mugration model reconstructs ancestral traits such as location, keeping several candidate states wherever the data can’t decide between them. Epidemiological parameters are then fitted on this fixed tree, for example with TreeTime’s coalescent skyline, PhyloDeep’s deep-learning estimators, or fast maximum-likelihood multi-type birth–death estimators such as PyBDEI (Zhukova et al. 2023, Syst Biol, doi:10.1093/sysbio/syad059). PyBDEI reformulates the model’s equations so they can be solved in parallel. It estimates R, the infectious period and the incubation period, with confidence intervals, on trees of 10,000 samples in about two minutes, and it can also handle forests of trees from multiple introductions. The trade-off: one best tree is fast and scales to huge datasets, but tree uncertainty isn’t carried through automatically and has to be added back, for instance by repeating the analysis on bootstrap trees.'}
+];
+
+/* ---------- player ---------- */
+var stage=document.getElementById('stage'),stepsEl=document.getElementById('steps'),cur=0,t0=performance.now(),finalDone=false;
+var reduced=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+scenes.forEach(function(sc,i){var b=document.createElement('button');b.type='button';b.innerHTML='<span class="fill"></span>'+(i+1);b.setAttribute('aria-label','Step '+(i+1)+': '+sc.title);b.onclick=function(){go(i);};stepsEl.appendChild(b);});
+function restart(){t0=performance.now();finalDone=false;}
+function go(i){
+  cur=clamp(i,0,scenes.length-1);var sc=scenes[cur];
+  document.getElementById('title').textContent=sc.title;
+  document.getElementById('caption').textContent=sc.caption;
+  stage.setAttribute('aria-label',sc.title);
+  document.getElementById('bdPanel').hidden=!sc.bd;
+  document.getElementById('bPrev').disabled=cur===0;
+  document.getElementById('bNext').textContent=cur===scenes.length-1?'Start over':'Next';
+  Array.prototype.forEach.call(stepsEl.children,function(b,j){b.classList.toggle('done',j<cur);if(j===cur)b.setAttribute('aria-current','step');else b.removeAttribute('aria-current');b.firstChild.style.width='';});
+  if(sc.bd&&!S5state.sim)runBD();
+  restart();
+}
+function frame(now){
+  var sc=scenes[cur],t=reduced?999:(now-t0)/1000,dur=sc.s.dur;
+  if(!finalDone){
+    stage.innerHTML='<svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">'+sc.s.render(t)+'</svg>';
+    var fl=stepsEl.children[cur].firstChild;fl.style.width='calc((100% - 8px) * '+clamp(t/dur,0,1).toFixed(3)+')';
+    if(t>dur+0.3)finalDone=true;
+  }
+  requestAnimationFrame(frame);
+}
+document.getElementById('bPrev').onclick=function(){go(cur-1);};
+document.getElementById('bNext').onclick=function(){go(cur===scenes.length-1?0:cur+1);};
+document.getElementById('bReplay').onclick=function(){if(scenes[cur].bd)runBD();else restart();};
+document.addEventListener('keydown',function(e){if(e.target.tagName==='INPUT')return;if(e.key==='ArrowRight')go(cur+1);if(e.key==='ArrowLeft')go(cur-1);});
+var rR=document.getElementById('rR'),rP=document.getElementById('rP'),cI=document.getElementById('cI');
+rR.oninput=function(){document.getElementById('oR').textContent=(+rR.value).toFixed(1);};
+rP.oninput=function(){document.getElementById('oP').textContent=(+rP.value).toFixed(2);};
+rR.onchange=function(){S5state.R=+rR.value;runBD();};
+rP.onchange=function(){S5state.p=+rP.value;runBD();};
+cI.onchange=function(){S5state.interv=cI.checked;runBD();};
+document.getElementById('bRun').onclick=runBD;
+go(0);requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
